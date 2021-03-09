@@ -5,6 +5,17 @@ I would like to provide IPv6 ULA addresses for several services to internal clie
 There is already a feature request open but I don't know in which version pfSense NPT can handle dynamic prefixes (and accept the reality in Germany at least):
 - https://redmine.pfsense.org/issues/4881
 
+# Implementation
+The script uses a 3rd party pfSense API to obtain current configured NPT destination prefix (using the interface name npt_iface). It compares this prefix with the prefix of a system's interface IPv6 address. In case they differ it updates the NPT destination prefix.
+
+# Limitations
+I've tested this with:
+* pfSense 2.5.0
+* fauxAPI 1.4
+* 1 NPT mapping
+* 1 system "Tracking" interface
+* /64 Prefix Size
+
 # Installation
 ## Requirements
 Please make sure to have following packages installed: 
