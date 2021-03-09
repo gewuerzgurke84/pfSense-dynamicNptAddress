@@ -36,8 +36,8 @@ Please make sure to have following packages installed:
 ## Adjust the parameter section of the script to your needs
 * Set fauxapi apiKey+apiSecret+path to fauxapi client script
 * Set NPT interfaces and System interfaces that should stay in sync
-...*  npt_iface is the NPT interface to perform ULA<->GUA Mapping
-...* npt_sysiface is the Systems interface with dynamic prefix
+   *  npt_iface is the NPT interface to perform ULA<->GUA Mapping
+   * npt_sysiface is the Systems interface with dynamic prefix
 
 ## Add a cron
 * Setup a cron to regulary check if NPT and system interface prefix matches
