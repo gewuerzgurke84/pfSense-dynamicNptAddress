@@ -18,6 +18,7 @@ fauxapi_script="/root/bin/pfsense_fauxapi_client_bash/sources/pfsense-fauxapi.sh
 fauxapi_host="127.0.0.1"
 fauxapi_apikey="yourFauxApiKey"
 fauxapi_apisecret="yourFauxApiSecret"
+fauxapi_scheme="http"
 
 # Configuration
 npt_iface="wan"
@@ -39,7 +40,7 @@ cleanup() {
 echo "[1] Obtaining configured NPT destination address of $npt_iface"
 
 # Get config
-curl -X GET --silent --insecure --header "fauxapi-auth: ${fauxapi_auth}" "http://${fauxapi_host}/fauxapi/v1/?action=config_get" > /tmp/$$.config_get
+curl -L -X GET --silent --insecure --header "fauxapi-auth: ${fauxapi_auth}" "${fauxapi_scheme}://${fauxapi_host}/fauxapi/v1/?action=config_get" > /tmp/$$.config_get
 # Get config npt dest
 cat /tmp/$$.config_get | jq ".data.config.nat.npt[] | select(.interface==\"${npt_iface}\")" > /tmp/$$.config_npt_dest
 # Get current npt dest addr
@@ -85,7 +86,7 @@ if [ "$ntp_prefix" != "$sys_prefix" ]; then
 	echo '{ "nat": { "npt": [' > /tmp/$$.config_patch
 	echo "${npt_patch/$npt_dstAddr/$new_npt_dest}" >> /tmp/$$.config_patch
 	echo '] } }' >> /tmp/$$.config_patch
-	curl -X POST --silent --insecure --header "fauxapi-auth: ${fauxapi_auth}" --header "Content-Type: application/json" --data @/tmp/$$.config_patch http://${fauxapi_host}/fauxapi/v1/?action=config_patch
+	curl -L -X POST --silent --insecure --header "fauxapi-auth: ${fauxapi_auth}" --header "Content-Type: application/json" --data @/tmp/$$.config_patch "${fauxapi_scheme}://${fauxapi_host}/fauxapi/v1/?action=config_patch"
 	patchResponse=$?
 	if [ "$patchResponse" != "0" ]; then
 		echo "[3] ... Patching NTP dest address failed ($patchResponse)"
