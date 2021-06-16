@@ -11,7 +11,7 @@
 
 #
 # 0 - Setup
-# 
+#
 
 # Connection to fauxapi (update to your needs/environment)
 fauxapi_script="/root/bin/pfsense_fauxapi_client_bash/sources/pfsense-fauxapi.sh"
@@ -20,9 +20,8 @@ fauxapi_apikey="yourFauxApiKey"
 fauxapi_apisecret="yourFauxApiSecret"
 fauxapi_scheme="http"
 
-# Configuration
-npt_iface="wan"
-npt_sysiface="igb1"
+# Logger
+loggertag=updateNtpTables.sh
 
 # Include Bash Client Lib
 source $fauxapi_script
@@ -31,74 +30,88 @@ source $fauxapi_script
 export fauxapi_auth=$(fauxapi_auth ${fauxapi_apikey} ${fauxapi_apisecret})
 
 cleanup() {
-	rm /tmp/$$.*
+        rm /tmp/$$.*
 }
 
 #
-# 1 - Obtain configured NTP Destination Address
+# 1 - Get current NPTv6 configuration
 #
-echo "[1] Obtaining configured NPT destination address of $npt_iface"
-
+echo "1 - Get current NPTv6 configuration"
+logger -t $loggertag "1 - Get current NPTv6 configuration"
 # Get config
 curl -L -X GET --silent --insecure --header "fauxapi-auth: ${fauxapi_auth}" "${fauxapi_scheme}://${fauxapi_host}/fauxapi/v1/?action=config_get" > /tmp/$$.config_get
-# Get config npt dest
-cat /tmp/$$.config_get | jq ".data.config.nat.npt[] | select(.interface==\"${npt_iface}\")" > /tmp/$$.config_npt_dest
-# Get current npt dest addr
-npt_dstAddr=$(cat /tmp/$$.config_npt_dest | jq -r .destination.address)
-echo "[1] ... Current NPT Destination Address: $npt_dstAddr"
-# Check
-if [ -z "$npt_dstAddr" ]; then
-	echo "[1] ... Cannot get configured address, giving up"
-	cleanup
-	exit -1
+
+# Get NPTv6 config part
+cat /tmp/$$.config_get |jq ".data.config.nat.npt" > /tmp/$$.config_nptv6
+
+#
+# 2 - Iterate over NPTv6 settings and check iface GUA addresses
+#
+nptsettinglen=$(cat /tmp/$$.config_nptv6 | jq length)
+patchreq=
+if [ "$nptsettinglen" -gt 0 ]; then
+	nptsettingcnt="$((nptsettinglen-1))"
+	patchjson=$(cat /tmp/$$.config_nptv6 |jq .)		
+	
+	for nptIdx in $(seq 0 $nptsettingcnt); do		
+		sysifacemapping=$(cat /tmp/$$.config_nptv6 | jq -r .[$nptIdx].descr)
+		configprefix=$(cat /tmp/$$.config_nptv6 | jq -r .[$nptIdx].destination.address)
+		echo "2 - Validation for iface=$sysifacemapping and prefix=$configprefix"
+		logger -t $loggertag "2 - Validation for iface=$sysifacemapping and prefix=$configprefix"
+		# No descr in NPTv6 setting
+		if [ -z "$sysifacemapping" ]; then
+			echo "2 - NPTv6 description is empty, please specify system iface name"
+			logger -t $loggertag "2 - NPTv6 description is empty, please specify system iface name"
+			continue
+		fi						
+		# Try to obtain current iface address
+		addresses=$(ifconfig $sysifacemapping | grep inet6 | grep 2001 |awk '{print $2}')
+		checkaddresses=$(echo $addresses | wc -l)
+		if [ $checkaddresses != 1 ]; then
+			echo "2 - More than one public address for iface=$sysifacemapping (addresses=$addresses), skipping..."
+			logger -t $loggertag "2 - More than one public address for iface=$sysifacemapping (addresses=$addresses), skipping..."
+			continue
+		fi
+		# Compare
+		sysifaceaddress=$addresses
+		sysprefix=$(echo $addresses |head -c 19)::/64
+		echo "2 - GUA address of iface=$sysifacemapping seems to be $sysifaceaddress / $sysprefix"
+		if [ "$configprefix" != "$sysprefix" ]; then
+			echo "2 - Prepare reconfig of NTPv6 destination prefix for $sysifacemapping to $sysprefix"
+			logger -t $loggertag "2 - Prepare reconfig of NTPv6 destination prefix for $sysifacemapping to $sysprefix"
+			jqStatement=".[$nptIdx].destination.address = \"$sysprefix\""
+			patchjson=$(echo $patchjson | jq "${jqStatement}")
+			patchreq="yes"			
+		else
+			echo "2 - Destination Prefixes match, no todo"
+			logger -t $loggertag "2 - Destination Prefixes match, no todo"
+		fi
+	done
 fi
 
-
 #
-# 2 - Obtain current IPv6 GUA Address
+# 3 - Apply Patch
 #
-echo "[2] Obtaining IPv6 address of $npt_sysiface"
-
-# Get interface addr
-addresses=$(ifconfig $npt_sysiface | grep inet6 | grep 2001 |awk '{print $2}')
-# Check if only one address found
-checkaddresses=$(echo $addresses | wc -l)
-if [ $checkaddresses != "1" ]; then
-	echo "[2] ... Unexpected number of GUA addresses (must be 1): $addresses"
-	cleanup
-	exit -2
-fi
-echo "[2] ... Current GUA Address: $addresses"
-
-#
-# 3 - Compare Prefix and update if required
-#
-echo "[3] Check if sys interface and npt interface are configured correctly"
-
-ntp_prefix=$(echo $npt_dstAddr |head -c 19)
-sys_prefix=$(echo $addresses |head -c 19)
-if [ "$ntp_prefix" != "$sys_prefix" ]; then
-	echo "[3] ... NPT and interface prefix, differ, let's update"
-	npt_patch=$(cat /tmp/$$.config_npt_dest)
-	new_npt_dest="${sys_prefix}::/64"
-	echo "[3] ... Patching NPT dest address from $npt_dstAddr to $new_npt_dest"
-	# Build patch json
-	echo '{ "nat": { "npt": [' > /tmp/$$.config_patch
-	echo "${npt_patch/$npt_dstAddr/$new_npt_dest}" >> /tmp/$$.config_patch
-	echo '] } }' >> /tmp/$$.config_patch
-	curl -L -X POST --silent --insecure --header "fauxapi-auth: ${fauxapi_auth}" --header "Content-Type: application/json" --data @/tmp/$$.config_patch "${fauxapi_scheme}://${fauxapi_host}/fauxapi/v1/?action=config_patch"
-	patchResponse=$?
-	if [ "$patchResponse" != "0" ]; then
-		echo "[3] ... Patching NTP dest address failed ($patchResponse)"
-		cleanup
-	else
-		echo "[3] ... Patching NTP dest address succesfully"
-	fi
+if [ -z "$patchreq" ]; then
+	echo "3 - No Patch required"
+	logger -t $loggertag "3 - No Patch required"
 else
-	echo "[3] ... NPT prefix matchs interface prefix, everything is fine (NTP: $ntp_prefix , Sys: $sys_prefix)"
+	echo "3 - Apply patch"
+	logger -t $loggertag "3 - Apply patch"
+	echo '{ "nat": { "npt": ' > /tmp/$$.config_nptv6_patch
+	echo $patchjson >> /tmp/$$.config_nptv6_patch
+	echo ' } }' >> /tmp/$$.config_nptv6_patch
+	curl -L -X GET --silent --insecure --header "fauxapi-auth: ${fauxapi_auth}" "${fauxapi_scheme}://${fauxapi_host}/fauxapi/v1/?action=config_reload"
+	curl -L -X POST --silent --insecure --header "fauxapi-auth: ${fauxapi_auth}" --header "Content-Type: application/json" --data @/tmp/$$.config_nptv6_patch "${fauxapi_scheme}://${fauxapi_host}/fauxapi/v1/?action=config_patch"
+	if [ "$?" -eq 0 ]; then
+		echo "3 - Patch succesfully applied"
+		logger -t $loggertag "3 - Patch succesfully applied"
+		exit 0
+	else
+		echo "3 - Patch not succesfully applied"
+		logger -t $loggertag "3 - Patch not succesfully applied"
+		exit 1
+	fi
 fi
 
-#
-# 4 - Cleanup
-#
 cleanup
