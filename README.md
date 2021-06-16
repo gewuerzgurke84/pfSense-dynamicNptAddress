@@ -1,8 +1,8 @@
 # pfSense-dynamicNptAddress
 
 # Purpose
-I would like to provide IPv6 ULA addresses for several services to internal clients (e.g. IPv6 DNS Server). Unfortunetely my ISP changes my IPv6 prefix on a regular basis, thus I cannot use public GUA addresses to hand out to the clients. I decided to use [pfSense NPTv6](https://docs.netgate.com/pfsense/en/latest/nat/npt.html) feature to allow mapping between ULA and GUA addresses.
-There is already a feature request open but I don't know in which version pfSense NPT can handle dynamic prefixes (and accept the reality in Germany at least):
+I would like to provide IPv6 ULA addresses for several services to internal clients (e.g. IPv6 DNS Server). Unfortunetely my ISP changes my IPv6 prefix on a regular basis, thus I cannot use public GUA addresses to hand out to the clients. I decided to use [pfSense NPTv6](https://docs.netgate.com/pfsense/en/latest/nat/npt.html) feature to allow mapping between ULA and GUA addresses. 
+pfSense is currently unable to adjust NPTv6 mappings to  handle dynamic prefixes:
 - https://redmine.pfsense.org/issues/4881
 
 # Implementation
