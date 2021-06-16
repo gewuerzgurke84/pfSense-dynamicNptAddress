@@ -1,19 +1,19 @@
 # pfSense-dynamicNptAddress
 
 # Purpose
-I would like to provide IPv6 ULA addresses for several services to internal clients (e.g. IPv6 DNS Server). Unfortunetely my ISP changes my IPv6 prefix on a regular basis, thus I cannot use public GUA addresses to hand out to the clients. I decided to use [pfSense NPT](https://docs.netgate.com/pfsense/en/latest/nat/npt.html) feature to allow mapping between ULA and GUA addresses.
+I would like to provide IPv6 ULA addresses for several services to internal clients (e.g. IPv6 DNS Server). Unfortunetely my ISP changes my IPv6 prefix on a regular basis, thus I cannot use public GUA addresses to hand out to the clients. I decided to use [pfSense NPTv6](https://docs.netgate.com/pfsense/en/latest/nat/npt.html) feature to allow mapping between ULA and GUA addresses.
 There is already a feature request open but I don't know in which version pfSense NPT can handle dynamic prefixes (and accept the reality in Germany at least):
 - https://redmine.pfsense.org/issues/4881
 
 # Implementation
-The script uses a 3rd party pfSense API to obtain current configured NPT destination prefix (using the interface name npt_iface). It compares this prefix with the prefix of a system's interface IPv6 address. In case they differ it updates the NPT destination prefix.
+The script uses a 3rd party pfSense API to obtain configured NPTv6 destination prefixes. It compares this prefix with the prefix of a system's interface IPv6 address. In case they differ it updates the NPT destination prefix. The description of the NTPv6 entry defines the interface name.
 
 # Limitations
 I've tested this with:
 * pfSense 2.5.0
 * fauxAPI 1.4
-* 1 NPT mapping
-* 1 system "Tracking" interface
+* Multiple NPT mapping
+* Multiple system "Tracking" interface
 * /64 Prefix Size
 
 # Installation
@@ -35,9 +35,9 @@ Please make sure to have following packages installed:
 
 ## Adjust the parameter section of the script to your needs
 * Set fauxapi apiKey+apiSecret+path to fauxapi client script
-* Set NPT interfaces and System interfaces that should stay in sync
-   *  npt_iface is the NPT interface to perform ULA<->GUA Mapping
-   * npt_sysiface is the Systems interface with dynamic prefix
+
+## Adjust NPTv6 mappings and set description to physical interface name
+![dynamicNptAddressSample](https://user-images.githubusercontent.com/29427019/122222633-bb7d8c80-ceb2-11eb-9669-2aa980387a8d.png)
 
 ## Add a cron
 * Setup a cron to regulary check if NPT and system interface prefix matches
