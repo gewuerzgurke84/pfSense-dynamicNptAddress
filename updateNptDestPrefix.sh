@@ -74,7 +74,7 @@ if [ "$nptsettinglen" -gt 0 ]; then
 		fi
 		# Compare
 		sysifaceaddress=$addresses
-		sysprefix=$(echo $addresses |head -c 19)::/64
+		sysprefix=$(echo $addresses |cut -d: -f1-4)::/64
 		echo "2 - GUA address of iface=$sysifacemapping seems to be $sysifaceaddress / $sysprefix"
 		if [ "$configprefix" != "$sysprefix" ]; then
 			echo "2 - Prepare reconfig of NTPv6 destination prefix for $sysifacemapping to $sysprefix"
